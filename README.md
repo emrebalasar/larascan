@@ -62,7 +62,7 @@ Many projects only utilize a portion of these native features. Larascan helps an
 - **Fast Execution:** Analyzes production PHP files quickly via AST traversal.
 - **Dynamic Analysis:** Introspects the active Laravel Core version without hardcoded class lists.
 - **Read-Only:** Analyzes code via AST parsing without altering your source code.
-- **JSON Output:** Export metrics as structured JSON for CI/CD pipelines or dashboards.
+- **Multiple Report Formats:** Export adoption reports as terminal tables, JSON, Markdown, or standalone HTML.
 - **Artisan Integration:** Registers `php artisan native:stats` via Laravel Package Discovery.
 
 ## Installation
@@ -97,6 +97,14 @@ vendor/bin/larascan app/Services
 
 # Output JSON for CI/CD pipelines or automated metrics:
 vendor/bin/larascan --json
+
+# Export a Markdown table or a standalone HTML report:
+vendor/bin/larascan --format=markdown
+vendor/bin/larascan --format=html
+
+# Use the short Markdown alias or select JSON through --format:
+vendor/bin/larascan --format=md
+vendor/bin/larascan --format=json
 ```
 
 ### 2. Artisan Command
@@ -112,6 +120,9 @@ php artisan native:stats --used
 
 # Filter by unused only:
 php artisan native:stats --unused
+
+# Export a standalone HTML report:
+php artisan native:stats --format=html
 ```
 
 ## Configuration (Optional)
