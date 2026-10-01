@@ -102,6 +102,10 @@ vendor/bin/larascan --json
 vendor/bin/larascan --format=markdown
 vendor/bin/larascan --format=html
 
+# Write an exportable report directly to a file:
+vendor/bin/larascan --format=html --output=report.html
+vendor/bin/larascan --format=markdown -o docs/laravel-adoption.md
+
 # Use the short Markdown alias or select JSON through --format:
 vendor/bin/larascan --format=md
 vendor/bin/larascan --format=json
@@ -123,6 +127,9 @@ php artisan native:stats --unused
 
 # Export a standalone HTML report:
 php artisan native:stats --format=html
+
+# Write the report directly to a file:
+php artisan native:stats --format=html --output=report.html
 ```
 
 ## Configuration (Optional)

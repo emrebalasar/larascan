@@ -90,6 +90,92 @@ class StatsCommandTest extends TestCase
         $this->assertStringContainsString('<table>', $output);
     }
 
+    public function test_it_writes_exportable_reports_directly_to_files(): void
+    {
+        $formats = [
+            'json' => '"laravel_version"',
+            'markdown' => '# Larascan adoption report',
+            'html' => '<!doctype html>',
+        ];
+
+        foreach ($formats as $format => $expectedContent) {
+            $outputFile = sys_get_temp_dir()
+                . DIRECTORY_SEPARATOR
+                . 'larascan-report-'
+                . uniqid('', true)
+                . '.'
+                . $format;
+
+            try {
+                $exitCode = Artisan::call(StatsCommand::COMMAND_NAME, [
+                    'path' => $this->workbenchPath(),
+                    '--format' => $format,
+                    '--output' => $outputFile,
+                ]);
+
+                $this->assertSame(0, $exitCode);
+                $this->assertFileExists($outputFile);
+
+                $contents = file_get_contents($outputFile);
+
+                $this->assertIsString($contents);
+                $this->assertStringContainsString($expectedContent, $contents);
+                $this->assertStringContainsString(
+                    'Report successfully exported to',
+                    Artisan::output()
+                );
+            } finally {
+                if (is_file($outputFile)) {
+                    unlink($outputFile);
+                }
+            }
+        }
+    }
+
+    public function test_it_rejects_output_without_an_exportable_format(): void
+    {
+        $outputFile = sys_get_temp_dir()
+            . DIRECTORY_SEPARATOR
+            . 'larascan-report-'
+            . uniqid('', true)
+            . '.txt';
+
+        $exitCode = Artisan::call(StatsCommand::COMMAND_NAME, [
+            'path' => $this->workbenchPath(),
+            '--output' => $outputFile,
+        ]);
+
+        $this->assertSame(1, $exitCode);
+        $this->assertFileDoesNotExist($outputFile);
+        $this->assertStringContainsString(
+            'The --output option requires json, markdown, or html report format.',
+            Artisan::output()
+        );
+    }
+
+    public function test_it_reports_a_missing_output_directory(): void
+    {
+        $directory = sys_get_temp_dir()
+            . DIRECTORY_SEPARATOR
+            . 'larascan-missing-'
+            . uniqid('', true);
+
+        $outputFile = $directory . DIRECTORY_SEPARATOR . 'report.json';
+
+        $exitCode = Artisan::call(StatsCommand::COMMAND_NAME, [
+            'path' => $this->workbenchPath(),
+            '--format' => 'json',
+            '--output' => $outputFile,
+        ]);
+
+        $this->assertSame(1, $exitCode);
+        $this->assertFileDoesNotExist($outputFile);
+        $this->assertStringContainsString(
+            'Output directory does not exist:',
+            Artisan::output()
+        );
+    }
+
     public function test_html_formatter_escapes_untrusted_report_values(): void
     {
         $result = new InventoryResult(
