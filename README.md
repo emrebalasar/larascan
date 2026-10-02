@@ -102,6 +102,14 @@ vendor/bin/larascan --json
 vendor/bin/larascan --format=markdown
 vendor/bin/larascan --format=html
 
+# Write an exportable report directly to a file:
+vendor/bin/larascan --output=report.json
+vendor/bin/larascan -o build/reports/larascan.html
+vendor/bin/larascan --format=markdown -o docs/laravel-adoption.md
+
+# When --format is omitted, the file extension selects JSON, Markdown, or HTML.
+# Missing parent directories are created automatically.
+
 # Use the short Markdown alias or select JSON through --format:
 vendor/bin/larascan --format=md
 vendor/bin/larascan --format=json
@@ -123,6 +131,10 @@ php artisan native:stats --unused
 
 # Export a standalone HTML report:
 php artisan native:stats --format=html
+
+# Write the report directly to a file.
+# The .html extension lets Larascan infer the format:
+php artisan native:stats --output=report.html
 ```
 
 ## Configuration (Optional)

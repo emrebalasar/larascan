@@ -79,6 +79,12 @@ class StatsCommand extends Command
             InputOption::VALUE_REQUIRED,
             'Report format: table, json, markdown (md), or html'
         );
+        $this->addOption(
+            'output',
+            'o',
+            InputOption::VALUE_REQUIRED,
+            'Write json, markdown, or html report directly to a file'
+        );
     }
 
     public function handle(?InventoryScanner $scanner = null): int
@@ -103,8 +109,28 @@ class StatsCommand extends Command
             return Command::FAILURE;
         }
 
-        $rawFormat = $this->option('json') ? 'json' : (string) ($formatOption ?? 'table');
-        $format = ReportFormat::tryFromAlias($rawFormat);
+        $rawOutput = $this->option('output');
+        $outputPath = null;
+
+        if ($rawOutput !== null) {
+            if (! is_string($rawOutput) || trim($rawOutput) === '') {
+                $this->error('The --output option requires a non-empty path.');
+
+                return Command::FAILURE;
+            }
+
+            $outputPath = trim($rawOutput);
+        }
+
+        $rawFormat = $this->option('json')
+            ? 'json'
+            : ($formatOption !== null ? (string) $formatOption : '');
+
+        $format = $rawFormat !== ''
+            ? ReportFormat::tryFromAlias($rawFormat)
+            : ($outputPath !== null
+                ? ReportFormat::tryFromExtension(pathinfo($outputPath, PATHINFO_EXTENSION)) ?? ReportFormat::Table
+                : ReportFormat::Table);
 
         if ($format === null) {
             $this->error(sprintf(
@@ -115,15 +141,131 @@ class StatsCommand extends Command
             return Command::FAILURE;
         }
 
+        if ($outputPath !== null) {
+            if (! $format->isExportable()) {
+                $this->error('The --output option requires json, markdown, or html report format.');
+
+                return Command::FAILURE;
+            }
+
+            if (! $this->prepareOutputPath($outputPath)) {
+                return Command::FAILURE;
+            }
+        }
+
         $activeScanner = $scanner ?? $this->scanner ?? $this->resolveScanner();
         $result = $activeScanner->scan($path, $skipTests);
 
-        match ($format) {
-            ReportFormat::Json => $this->output->writeln(json_encode($result->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)),
-            ReportFormat::Markdown => $this->output->writeln(MarkdownFormatter::format($result, usedOnly: $usedOnly, unusedOnly: $unusedOnly)),
-            ReportFormat::Html => $this->output->writeln(HtmlFormatter::format($result, usedOnly: $usedOnly, unusedOnly: $unusedOnly)),
-            ReportFormat::Table => $this->renderTableOutput($result, usedOnly: $usedOnly, unusedOnly: $unusedOnly),
+        if ($format === ReportFormat::Table) {
+            $this->renderTableOutput($result, usedOnly: $usedOnly, unusedOnly: $unusedOnly);
+
+            return Command::SUCCESS;
+        }
+
+        $content = $this->formatExportableReport($format, $result, $usedOnly, $unusedOnly);
+
+        if ($outputPath !== null) {
+            return $this->writeReport($outputPath, $content);
+        }
+
+        $this->output->writeln($content);
+
+        return Command::SUCCESS;
+    }
+
+    private function formatExportableReport(
+        ReportFormat $format,
+        InventoryResult $result,
+        bool $usedOnly,
+        bool $unusedOnly
+    ): string {
+        return match ($format) {
+            ReportFormat::Json => json_encode(
+                $result->toArray(),
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR
+            ),
+            ReportFormat::Markdown => MarkdownFormatter::format(
+                $result,
+                usedOnly: $usedOnly,
+                unusedOnly: $unusedOnly
+            ),
+            ReportFormat::Html => HtmlFormatter::format(
+                $result,
+                usedOnly: $usedOnly,
+                unusedOnly: $unusedOnly
+            ),
+            ReportFormat::Table => throw new \LogicException('Table format is not exportable.'),
         };
+    }
+
+    private function prepareOutputPath(string $path): bool
+    {
+        $directory = dirname($path);
+
+        if (! is_dir($directory)) {
+            error_clear_last();
+
+            $created = @mkdir($directory, 0755, true);
+
+            if (! $created && ! is_dir($directory)) {
+                $error = error_get_last();
+                $details = is_array($error) && isset($error['message'])
+                    ? sprintf(' (%s)', $error['message'])
+                    : '';
+
+                $this->error(sprintf(
+                    'Output directory could not be created: %s%s',
+                    $directory,
+                    $details
+                ));
+
+                return false;
+            }
+        }
+
+        if (! is_writable($directory)) {
+            $this->error(sprintf('Output directory is not writable: %s', $directory));
+
+            return false;
+        }
+
+        if (is_dir($path)) {
+            $this->error(sprintf('Destination path is a directory: %s', $path));
+
+            return false;
+        }
+
+        if (file_exists($path) && ! is_writable($path)) {
+            $this->error(sprintf('Destination file is not writable: %s', $path));
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private function writeReport(string $path, string $contents): int
+    {
+        error_clear_last();
+
+        $bytesWritten = @file_put_contents($path, $contents, LOCK_EX);
+
+        if ($bytesWritten === false) {
+            $error = error_get_last();
+            $details = is_array($error) && isset($error['message'])
+                ? sprintf(' (%s)', $error['message'])
+                : '';
+
+            $this->error(sprintf(
+                'Unable to write report to: %s%s',
+                $path,
+                $details
+            ));
+
+            return Command::FAILURE;
+        }
+
+        $this->info(sprintf('✓ Report successfully exported to %s', $path));
 
         return Command::SUCCESS;
     }
