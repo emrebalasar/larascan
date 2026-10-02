@@ -25,6 +25,25 @@ class ReportFormatTest extends TestCase
         $this->assertSame(ReportFormat::Json, ReportFormat::tryFromAlias('JSON'));
     }
 
+    public function test_it_resolves_export_formats_from_file_extensions(): void
+    {
+        $this->assertSame(ReportFormat::Json, ReportFormat::tryFromExtension('json'));
+        $this->assertSame(ReportFormat::Json, ReportFormat::tryFromExtension('.JSON'));
+        $this->assertSame(ReportFormat::Markdown, ReportFormat::tryFromExtension('md'));
+        $this->assertSame(ReportFormat::Markdown, ReportFormat::tryFromExtension('markdown'));
+        $this->assertSame(ReportFormat::Html, ReportFormat::tryFromExtension('html'));
+        $this->assertSame(ReportFormat::Html, ReportFormat::tryFromExtension('.htm'));
+        $this->assertNull(ReportFormat::tryFromExtension('txt'));
+    }
+
+    public function test_it_identifies_exportable_formats(): void
+    {
+        $this->assertFalse(ReportFormat::Table->isExportable());
+        $this->assertTrue(ReportFormat::Json->isExportable());
+        $this->assertTrue(ReportFormat::Markdown->isExportable());
+        $this->assertTrue(ReportFormat::Html->isExportable());
+    }
+
     public function test_it_returns_null_for_unsupported_formats(): void
     {
         $this->assertNull(ReportFormat::tryFromAlias('pdf'));

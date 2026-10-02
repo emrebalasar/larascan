@@ -132,6 +132,45 @@ class StatsCommandTest extends TestCase
         }
     }
 
+    public function test_it_infers_export_format_from_output_extension(): void
+    {
+        $extensions = [
+            'json' => '"laravel_version"',
+            'md' => '# Larascan adoption report',
+            'markdown' => '# Larascan adoption report',
+            'html' => '<!doctype html>',
+            'htm' => '<!doctype html>',
+        ];
+
+        foreach ($extensions as $extension => $expectedContent) {
+            $outputFile = sys_get_temp_dir()
+                . DIRECTORY_SEPARATOR
+                . 'larascan-inferred-'
+                . uniqid('', true)
+                . '.'
+                . $extension;
+
+            try {
+                $exitCode = Artisan::call(StatsCommand::COMMAND_NAME, [
+                    'path' => $this->workbenchPath(),
+                    '--output' => $outputFile,
+                ]);
+
+                $this->assertSame(0, $exitCode);
+                $this->assertFileExists($outputFile);
+
+                $contents = file_get_contents($outputFile);
+
+                $this->assertIsString($contents);
+                $this->assertStringContainsString($expectedContent, $contents);
+            } finally {
+                if (is_file($outputFile)) {
+                    unlink($outputFile);
+                }
+            }
+        }
+    }
+
     public function test_it_rejects_output_without_an_exportable_format(): void
     {
         $outputFile = sys_get_temp_dir()
@@ -153,27 +192,64 @@ class StatsCommandTest extends TestCase
         );
     }
 
-    public function test_it_reports_a_missing_output_directory(): void
+    public function test_it_rejects_an_empty_output_path(): void
+    {
+        $exitCode = Artisan::call(StatsCommand::COMMAND_NAME, [
+            'path' => $this->workbenchPath(),
+            '--output' => '   ',
+        ]);
+
+        $this->assertSame(1, $exitCode);
+        $this->assertStringContainsString(
+            'The --output option requires a non-empty path.',
+            Artisan::output()
+        );
+    }
+
+    public function test_it_creates_missing_output_directories(): void
     {
         $directory = sys_get_temp_dir()
             . DIRECTORY_SEPARATOR
             . 'larascan-missing-'
             . uniqid('', true);
 
-        $outputFile = $directory . DIRECTORY_SEPARATOR . 'report.json';
+        $nestedDirectory = $directory
+            . DIRECTORY_SEPARATOR
+            . 'build'
+            . DIRECTORY_SEPARATOR
+            . 'reports';
 
-        $exitCode = Artisan::call(StatsCommand::COMMAND_NAME, [
-            'path' => $this->workbenchPath(),
-            '--format' => 'json',
-            '--output' => $outputFile,
-        ]);
+        $outputFile = $nestedDirectory . DIRECTORY_SEPARATOR . 'report.json';
 
-        $this->assertSame(1, $exitCode);
-        $this->assertFileDoesNotExist($outputFile);
-        $this->assertStringContainsString(
-            'Output directory does not exist:',
-            Artisan::output()
-        );
+        try {
+            $exitCode = Artisan::call(StatsCommand::COMMAND_NAME, [
+                'path' => $this->workbenchPath(),
+                '--output' => $outputFile,
+            ]);
+
+            $this->assertSame(0, $exitCode);
+            $this->assertDirectoryExists($nestedDirectory);
+            $this->assertFileExists($outputFile);
+            $this->assertJson((string) file_get_contents($outputFile));
+        } finally {
+            if (is_file($outputFile)) {
+                unlink($outputFile);
+            }
+
+            if (is_dir($nestedDirectory)) {
+                rmdir($nestedDirectory);
+            }
+
+            $buildDirectory = $directory . DIRECTORY_SEPARATOR . 'build';
+
+            if (is_dir($buildDirectory)) {
+                rmdir($buildDirectory);
+            }
+
+            if (is_dir($directory)) {
+                rmdir($directory);
+            }
+        }
     }
 
     public function test_html_formatter_escapes_untrusted_report_values(): void
